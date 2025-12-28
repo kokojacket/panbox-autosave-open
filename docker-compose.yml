@@ -1,5 +1,4 @@
-version: '3.8'
-
+name: panbox-autosave
 services:
   panbox-autosave:
     image: kokojacket/panbox-autosave:latest
@@ -80,6 +79,11 @@ services:
       timeout: 5s
       retries: 5
 
-    # 安全配置
+    # 安全配置 - PostgreSQL 需要 CHOWN 和 FOWNER 权限来初始化数据目录
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETGID
+      - SETUID
