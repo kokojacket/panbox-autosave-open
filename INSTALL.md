@@ -2,22 +2,23 @@
 
 ## 快速安装
 
-### 方式一：两步安装（推荐）
+### 方式一：在线一键安装（推荐）
 
 ```bash
-# 1. 下载安装脚本
-wget https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh
-
-# 2. 运行脚本
-sudo bash install.sh
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
-### 方式二：使用 curl
+### 方式二：下载后安装
 
 ```bash
-# 下载并运行
-curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh -o install.sh
-sudo bash install.sh
+# 下载安装脚本
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
+
+# 添加执行权限
+chmod +x install.sh
+
+# 运行脚本
+sudo ./install.sh
 ```
 
 ---
