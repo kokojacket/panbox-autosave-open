@@ -10,7 +10,7 @@ services:
         condition: service_healthy
 
     ports:
-      - "8000:8000"
+      - "1888:8000"
 
     volumes:
       # 持久化日志目录
