@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
-COMPOSE_URL="https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/docker-compose.yml"
+COMPOSE_URL="https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
 DOCKER_IMAGE="kokojacket/panbox-autosave:latest"
 DB_PASSWORD="panbox-autosave"
 START_PORT=1888
