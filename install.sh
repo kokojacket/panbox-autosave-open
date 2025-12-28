@@ -213,6 +213,11 @@ install_panbox() {
     print_info "创建数据目录..."
     mkdir -p "$INSTALL_DIR/logs"
     mkdir -p "$INSTALL_DIR/postgres"
+
+    # 设置目录权限（容器使用 UID 10001 运行）
+    chown -R 10001:10001 "$INSTALL_DIR/logs"
+    chown -R 999:999 "$INSTALL_DIR/postgres"  # PostgreSQL 使用 UID 999
+
     print_success "数据目录创建完成"
 
     # 下载 docker-compose.yml
