@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  panbox:
+    image: kokojacket/panbox-autosave:latest
+    container_name: panbox-autosave
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # 持久化日志目录
+      - /opt/panbox-autosave/logs:/app/logs
+
+    environment:
+      # 数据库配置 - PostgreSQL（默认）
+      DB_TYPE: "postgresql"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_USER: "panbox"
+      DB_PASSWORD: "panbox_secure_password_2025"
+      DB_NAME: "panbox"
+
+      # API 配置
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+
+      # 日志配置
+      LOG_LEVEL: "INFO"
+
+      # 静态文件路径（容器内）
+      STATIC_DIR: "/app/static"
+
+      # License Mate 配置
+      LICENSE_MATE_BASE_URL: "https://license.panbox.online"
+      LICENSE_MATE_PRODUCT_NAME: "panbox"
+      LICENSE_CACHE_TTL_SECONDS: "300"
+
+    # 安全配置（镜像硬化）
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+
+    tmpfs:
+      # 临时文件目录（只读根文件系统下必须可写）
+      - /tmp:size=100M,mode=1777
+      # Python 缓存目录
+      - /home/panbox/.cache:size=50M,uid=10001,gid=10001
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    # 资源限制（可选，根据实际需求调整）
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: panbox-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: panbox
+      POSTGRES_USER: panbox
+      POSTGRES_PASSWORD: panbox_secure_password_2025
+
+    volumes:
+      - /opt/panbox-autosave/postgres:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
