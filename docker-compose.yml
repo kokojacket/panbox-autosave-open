@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  panbox:
+  panbox-autosave:
     image: kokojacket/panbox-autosave:latest
     container_name: panbox-autosave
     restart: unless-stopped
@@ -21,9 +21,9 @@ services:
       DB_TYPE: "postgresql"
       DB_HOST: "postgres"
       DB_PORT: "5432"
-      DB_USER: "panbox"
-      DB_PASSWORD: "panbox_secure_password_2025"
-      DB_NAME: "panbox"
+      DB_USER: "panbox-autosave"
+      DB_PASSWORD: "panbox-autosave"
+      DB_NAME: "panbox-autosave"
 
       # API 配置
       API_HOST: "0.0.0.0"
@@ -37,23 +37,12 @@ services:
 
       # License Mate 配置
       LICENSE_MATE_BASE_URL: "https://license.panbox.online"
-      LICENSE_MATE_PRODUCT_NAME: "panbox"
+      LICENSE_MATE_PRODUCT_NAME: "panbox-autosave"
       LICENSE_CACHE_TTL_SECONDS: "300"
 
-    # 安全配置（镜像硬化）
-    security_opt:
-      - no-new-privileges:true
-
+    # 安全配置
     cap_drop:
       - ALL
-
-    read_only: true
-
-    tmpfs:
-      # 临时文件目录（只读根文件系统下必须可写）
-      - /tmp:size=100M,mode=1777
-      # Python 缓存目录
-      - /home/panbox/.cache:size=50M,uid=10001,gid=10001
 
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
@@ -74,23 +63,23 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: panbox-postgres
+    container_name: panbox-autosave-postgres
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: panbox
-      POSTGRES_USER: panbox
-      POSTGRES_PASSWORD: panbox_secure_password_2025
+      POSTGRES_DB: panbox-autosave
+      POSTGRES_USER: panbox-autosave
+      POSTGRES_PASSWORD: panbox-autosave
 
     volumes:
       - /opt/panbox-autosave/postgres:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U panbox"]
+      test: ["CMD-SHELL", "pg_isready -U panbox-autosave"]
       interval: 10s
       timeout: 5s
       retries: 5
 
     # 安全配置
-    security_opt:
-      - no-new-privileges:true
+    cap_drop:
+      - ALL

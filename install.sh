@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #==============================================================================
-# PanBox 一键部署脚本
-# 版本：1.0
-# 用途：自动化部署 PanBox 网盘自动转存系统
+# PanBox 管理脚本
+# 版本：2.0
+# 用途：安装、更新、重启、停止 PanBox 网盘自动转存系统
 #==============================================================================
 
 set -e  # 遇到错误立即退出
@@ -17,8 +17,10 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
-COMPOSE_URL="https://raw.githubusercontent.com/kokojacket/panbox-autosave/main/docker-compose.yml"
+COMPOSE_URL="https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/docker-compose.yml"
 DOCKER_IMAGE="kokojacket/panbox-autosave:latest"
+DB_PASSWORD="panbox-autosave"
+START_PORT=1888
 
 #==============================================================================
 # 工具函数
@@ -91,180 +93,310 @@ check_docker_compose() {
 }
 
 #==============================================================================
-# 主要功能函数
+# 端口检测函数
 #==============================================================================
 
-create_directories() {
-    print_header "创建数据目录"
-
-    mkdir -p "$INSTALL_DIR/logs"
-    mkdir -p "$INSTALL_DIR/postgres"
-
-    print_success "数据目录创建完成:"
-    echo "  - $INSTALL_DIR/logs"
-    echo "  - $INSTALL_DIR/postgres"
+check_port() {
+    local port=$1
+    if command -v ss &> /dev/null; then
+        ss -tuln | grep -q ":$port " && return 1 || return 0
+    elif command -v netstat &> /dev/null; then
+        netstat -tuln | grep -q ":$port " && return 1 || return 0
+    else
+        # 如果没有 ss 或 netstat，尝试绑定端口测试
+        (echo >/dev/tcp/127.0.0.1/$port) &>/dev/null && return 1 || return 0
+    fi
 }
 
-generate_password() {
-    # 生成随机密码（20位，包含字母数字特殊字符）
-    openssl rand -base64 32 | tr -d "=+/" | cut -c1-20
-}
-
-get_database_password() {
-    print_header "配置数据库密码"
-
-    echo -e "${YELLOW}请选择密码配置方式：${NC}"
-    echo "  1) 自动生成强密码（推荐）"
-    echo "  2) 手动输入密码"
-    echo ""
-
+find_available_port() {
+    local port=$START_PORT
     while true; do
-        read -p "请选择 [1/2]: " choice
-        case $choice in
-            1)
-                DB_PASSWORD=$(generate_password)
-                print_success "已生成强密码"
-                echo ""
-                echo -e "${YELLOW}⚠️  请妥善保存以下密码！${NC}"
-                echo -e "${GREEN}数据库密码: $DB_PASSWORD${NC}"
-                echo ""
-                read -p "按 Enter 键继续..."
-                break
-                ;;
-            2)
-                while true; do
-                    read -sp "请输入数据库密码: " DB_PASSWORD
-                    echo ""
+        if check_port $port; then
+            echo $port
+            return 0
+        fi
+        print_warning "端口 $port 已被占用，尝试下一个端口..."
+        port=$((port + 1))
 
-                    if [ -z "$DB_PASSWORD" ]; then
-                        print_error "密码不能为空"
-                        continue
-                    fi
-
-                    if [ ${#DB_PASSWORD} -lt 8 ]; then
-                        print_error "密码长度不能少于 8 位"
-                        continue
-                    fi
-
-                    read -sp "请再次输入密码确认: " DB_PASSWORD_CONFIRM
-                    echo ""
-
-                    if [ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]; then
-                        print_error "两次密码不一致，请重新输入"
-                        continue
-                    fi
-
-                    print_success "密码设置成功"
-                    break
-                done
-                break
-                ;;
-            *)
-                print_error "无效选择，请输入 1 或 2"
-                ;;
-        esac
+        # 防止无限循环，最多尝试 100 个端口
+        if [ $port -gt $((START_PORT + 100)) ]; then
+            print_error "无法找到可用端口（已尝试 $START_PORT - $port）"
+            exit 1
+        fi
     done
 }
 
-download_compose_file() {
-    print_header "下载配置文件"
+#==============================================================================
+# IP 地址检测函数
+#==============================================================================
 
-    print_info "正在从 GitHub 下载 docker-compose.yml..."
+get_public_ip() {
+    # 尝试多个公网 IP 查询服务
+    local ip=""
 
+    # 方法 1: ipify.org
+    ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # 方法 2: ifconfig.me
+    ip=$(curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # 方法 3: icanhazip.com
+    ip=$(curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return 0
+    fi
+
+    echo "无法获取"
+}
+
+get_local_ip() {
+    # 获取主要网络接口的 IP 地址
+    local ip=""
+
+    # 方法 1: hostname -I (适用于大多数 Linux)
+    if command -v hostname &> /dev/null; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    # 方法 2: ip route (适用于现代 Linux)
+    if command -v ip &> /dev/null; then
+        ip=$(ip route get 1 2>/dev/null | awk '{print $7; exit}')
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    # 方法 3: ifconfig (适用于旧版 Linux)
+    if command -v ifconfig &> /dev/null; then
+        ip=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1)
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    echo "无法获取"
+}
+
+#==============================================================================
+# 安装函数
+#==============================================================================
+
+install_panbox() {
+    print_header "安装 PanBox"
+
+    # 检查是否已安装
+    if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        print_warning "检测到已安装 PanBox"
+        read -p "是否覆盖安装？[y/N]: " confirm < /dev/tty
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            print_info "取消安装"
+            return 0
+        fi
+    fi
+
+    # 创建目录
+    print_info "创建数据目录..."
+    mkdir -p "$INSTALL_DIR/logs"
+    mkdir -p "$INSTALL_DIR/postgres"
+    print_success "数据目录创建完成"
+
+    # 下载 docker-compose.yml
+    print_info "下载配置文件..."
     if curl -fsSL "$COMPOSE_URL" -o "$INSTALL_DIR/docker-compose.yml"; then
         print_success "配置文件下载成功"
     else
         print_error "下载失败，请检查网络连接"
         exit 1
     fi
-}
 
-update_compose_passwords() {
-    print_header "更新配置文件密码"
+    # 查找可用端口
+    print_info "检测可用端口..."
+    AVAILABLE_PORT=$(find_available_port)
+    print_success "使用端口: $AVAILABLE_PORT"
 
+    # 更新 docker-compose.yml 中的端口和密码
     cd "$INSTALL_DIR"
 
-    # 使用 sed 替换密码（兼容 Linux 和 macOS）
+    # 替换端口
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
+        sed -i '' "s/\"[0-9]*:8000\"/\"$AVAILABLE_PORT:8000\"/g" docker-compose.yml
         sed -i '' "s/POSTGRES_PASSWORD: \".*\"/POSTGRES_PASSWORD: \"$DB_PASSWORD\"/g" docker-compose.yml
         sed -i '' "s/DB_PASSWORD: \".*\"/DB_PASSWORD: \"$DB_PASSWORD\"/g" docker-compose.yml
     else
         # Linux
+        sed -i "s/\"[0-9]*:8000\"/\"$AVAILABLE_PORT:8000\"/g" docker-compose.yml
         sed -i "s/POSTGRES_PASSWORD: \".*\"/POSTGRES_PASSWORD: \"$DB_PASSWORD\"/g" docker-compose.yml
         sed -i "s/DB_PASSWORD: \".*\"/DB_PASSWORD: \"$DB_PASSWORD\"/g" docker-compose.yml
     fi
 
-    print_success "密码配置完成"
-}
+    print_success "配置更新完成"
 
-pull_docker_image() {
-    print_header "拉取 Docker 镜像"
-
-    print_info "正在拉取镜像: $DOCKER_IMAGE"
-    print_info "这可能需要几分钟，请耐心等待..."
-
+    # 拉取镜像
+    print_info "拉取 Docker 镜像..."
     if docker pull "$DOCKER_IMAGE"; then
         print_success "镜像拉取成功"
     else
-        print_error "镜像拉取失败，请检查网络连接"
+        print_error "镜像拉取失败"
         exit 1
     fi
-}
 
-start_services() {
-    print_header "启动服务"
-
-    cd "$INSTALL_DIR"
-
-    print_info "正在启动 PanBox 服务..."
-
+    # 启动服务
+    print_info "启动服务..."
     if $DOCKER_COMPOSE_CMD up -d; then
-        print_success "服务启动成功！"
+        print_success "服务启动成功"
     else
         print_error "服务启动失败"
         exit 1
     fi
 
-    echo ""
+    # 等待服务启动
     print_info "等待服务健康检查..."
     sleep 5
 
-    # 显示服务状态
-    $DOCKER_COMPOSE_CMD ps
+    # 显示访问地址
+    show_access_info "$AVAILABLE_PORT"
 }
 
-show_final_info() {
-    print_header "部署完成"
+#==============================================================================
+# 更新函数
+#==============================================================================
 
-    echo -e "${GREEN}🎉 PanBox 已成功部署！${NC}"
+update_panbox() {
+    print_header "更新 PanBox"
+
+    # 检查是否已安装
+    if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        print_error "未检测到已安装的 PanBox，请先执行安装"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+
+    # 拉取最新镜像
+    print_info "拉取最新镜像..."
+    if docker pull "$DOCKER_IMAGE"; then
+        print_success "镜像拉取成功"
+    else
+        print_error "镜像拉取失败"
+        exit 1
+    fi
+
+    # 重启服务
+    print_info "重启服务..."
+    if $DOCKER_COMPOSE_CMD up -d; then
+        print_success "服务更新成功"
+    else
+        print_error "服务更新失败"
+        exit 1
+    fi
+
+    # 获取当前端口
+    CURRENT_PORT=$(grep -oP '"\K[0-9]+(?=:8000")' docker-compose.yml | head -1)
+
+    # 显示访问地址
+    show_access_info "$CURRENT_PORT"
+}
+
+#==============================================================================
+# 重启函数
+#==============================================================================
+
+restart_panbox() {
+    print_header "重启 PanBox"
+
+    # 检查是否已安装
+    if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        print_error "未检测到已安装的 PanBox，请先执行安装"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+
+    print_info "重启服务..."
+    if $DOCKER_COMPOSE_CMD restart; then
+        print_success "服务重启成功"
+    else
+        print_error "服务重启失败"
+        exit 1
+    fi
+
+    # 获取当前端口
+    CURRENT_PORT=$(grep -oP '"\K[0-9]+(?=:8000")' docker-compose.yml | head -1)
+
+    # 显示访问地址
+    show_access_info "$CURRENT_PORT"
+}
+
+#==============================================================================
+# 停止函数
+#==============================================================================
+
+stop_panbox() {
+    print_header "停止 PanBox"
+
+    # 检查是否已安装
+    if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        print_error "未检测到已安装的 PanBox"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+
+    print_info "停止服务..."
+    if $DOCKER_COMPOSE_CMD down; then
+        print_success "服务已停止"
+    else
+        print_error "服务停止失败"
+        exit 1
+    fi
+}
+
+#==============================================================================
+# 显示访问信息
+#==============================================================================
+
+show_access_info() {
+    local port=$1
+
+    print_header "访问地址"
+
+    # 获取公网 IP
+    print_info "正在获取公网 IP..."
+    PUBLIC_IP=$(get_public_ip)
+
+    # 获取内网 IP
+    print_info "正在获取内网 IP..."
+    LOCAL_IP=$(get_local_ip)
+
+    echo -e "${GREEN}🎉 PanBox 部署成功！${NC}"
     echo ""
-    echo "访问地址:"
-    echo -e "  ${BLUE}http://localhost:8000${NC}"
-    echo -e "  ${BLUE}http://$(hostname -I | awk '{print $1}'):8000${NC}"
-    echo ""
-    echo "数据目录:"
-    echo "  $INSTALL_DIR/logs      - 日志文件"
-    echo "  $INSTALL_DIR/postgres  - 数据库文件"
-    echo ""
-    echo "常用命令:"
-    echo "  查看日志:    cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD logs -f"
-    echo "  停止服务:    cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD down"
-    echo "  重启服务:    cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD restart"
-    echo "  查看状态:    cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD ps"
-    echo ""
-    echo -e "${YELLOW}⚠️  重要提醒：${NC}"
-    echo "  - 数据库密码已保存在: $INSTALL_DIR/docker-compose.yml"
-    echo "  - 请妥善保管密码，如需修改请编辑该文件"
-    echo "  - 备份数据库: docker exec panbox-postgres pg_dump -U panbox panbox > backup.sql"
+    echo "访问地址："
+    echo -e "  ${BLUE}公网: http://$PUBLIC_IP:$port${NC}"
+    echo -e "  ${BLUE}内网: http://$LOCAL_IP:$port${NC}"
     echo ""
 }
 
 #==============================================================================
-# 主流程
+# 主菜单
 #==============================================================================
 
-main() {
+show_menu() {
     clear
 
     cat << "EOF"
@@ -274,33 +406,61 @@ main() {
  |  __/ (_| | | | | |_) | (_) >  <
  |_|   \__,_|_| |_|____/ \___/_/\_\
 
-     网盘自动转存系统 - 一键部署脚本
-          Version 1.0
+     网盘自动转存系统 - 管理脚本
+          Version 2.0
 EOF
 
     echo ""
-    echo -e "${BLUE}此脚本将自动完成以下操作：${NC}"
-    echo "  1. 检查系统环境（Docker、Docker Compose）"
-    echo "  2. 创建数据目录 ($INSTALL_DIR)"
-    echo "  3. 配置数据库密码"
-    echo "  4. 下载配置文件"
-    echo "  5. 拉取 Docker 镜像"
-    echo "  6. 启动服务"
+    echo -e "${BLUE}请选择操作：${NC}"
+    echo "  1) 安装 PanBox"
+    echo "  2) 更新 PanBox"
+    echo "  3) 重启 PanBox"
+    echo "  4) 停止 PanBox"
+    echo "  0) 退出"
     echo ""
+}
 
-    read -p "按 Enter 键开始安装，或 Ctrl+C 取消..."
+#==============================================================================
+# 主流程
+#==============================================================================
 
-    # 执行安装步骤
+main() {
+    # 检查环境
     check_root
     check_docker
     check_docker_compose
-    create_directories
-    get_database_password
-    download_compose_file
-    update_compose_passwords
-    pull_docker_image
-    start_services
-    show_final_info
+
+    while true; do
+        show_menu
+        read -p "请输入选项 [0-4]: " choice < /dev/tty
+
+        case $choice in
+            1)
+                install_panbox
+                read -p "按 Enter 键返回菜单..." < /dev/tty
+                ;;
+            2)
+                update_panbox
+                read -p "按 Enter 键返回菜单..." < /dev/tty
+                ;;
+            3)
+                restart_panbox
+                read -p "按 Enter 键返回菜单..." < /dev/tty
+                ;;
+            4)
+                stop_panbox
+                read -p "按 Enter 键返回菜单..." < /dev/tty
+                ;;
+            0)
+                print_info "退出脚本"
+                exit 0
+                ;;
+            *)
+                print_error "无效选项，请输入 0-4"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 # 运行主函数
