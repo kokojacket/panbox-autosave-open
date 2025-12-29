@@ -5,8 +5,7 @@ services:
     container_name: panbox-autosave
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
 
     ports:
       - "1888:8000"
@@ -29,7 +28,7 @@ services:
       API_PORT: "8000"
 
       # 日志配置
-      LOG_LEVEL: "INFO"
+      LOG_LEVEL: "DEBUG"
 
       # 静态文件路径（容器内）
       STATIC_DIR: "/app/static"
@@ -42,13 +41,6 @@ services:
     # 安全配置
     cap_drop:
       - ALL
-
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
-      interval: 30s
-      timeout: 10s
-      start_period: 40s
-      retries: 3
 
     # 资源限制（可选，根据实际需求调整）
     deploy:
@@ -72,11 +64,5 @@ services:
 
     volumes:
       - /opt/panbox-autosave/postgres:/var/lib/postgresql/data
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U panbox-autosave"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
     # PostgreSQL 不限制 capabilities（数据库需要完整的文件系统权限）
