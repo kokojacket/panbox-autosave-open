@@ -33,9 +33,9 @@ services:
       # 静态文件路径（容器内）
       STATIC_DIR: "/app/static"
 
-      # License Mate 配置
-      LICENSE_MATE_BASE_URL: "https://license.panbox.online"
-      LICENSE_MATE_PRODUCT_NAME: "panbox-autosave"
+      # PanBox License 配置
+      PANBOX_LICENSE_BASE_URL: "https://license.panbox.online"
+      PANBOX_LICENSE_PRODUCT_NAME: "panbox-autosave"
       LICENSE_CACHE_TTL_SECONDS: "300"
 
     # 安全配置
