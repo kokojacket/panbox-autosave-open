@@ -131,7 +131,7 @@ export default defineConfig({
 
     // 编辑链接
     editLink: {
-      pattern: 'https://github.com/kokojacket/panbox-autosave/edit/main/deploy/docs/:path',
+      pattern: 'https://github.com/kokojacket/panbox-autosave-open/edit/main/docs/:path',
       text: '在 GitHub 上编辑此页'
     },
 
