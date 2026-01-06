@@ -148,27 +148,34 @@ find_available_port() {
 # IP 地址检测函数
 #==============================================================================
 
-get_public_ip() {
-    # 尝试多个公网 IP 查询服务
+get_public_ipv4() {
+    # 获取 IPv4 公网地址
     local ip=""
 
-    # 方法 1: ipify.org
-    ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
-    if [ -n "$ip" ]; then
+    # 方法 1: ipify.org (强制 IPv4)
+    ip=$(curl -4 -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "$ip"
         return 0
     fi
 
-    # 方法 2: ifconfig.me
-    ip=$(curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null)
-    if [ -n "$ip" ]; then
+    # 方法 2: ifconfig.me (强制 IPv4)
+    ip=$(curl -4 -s --connect-timeout 3 https://ifconfig.me 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "$ip"
         return 0
     fi
 
-    # 方法 3: icanhazip.com
-    ip=$(curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
-    if [ -n "$ip" ]; then
+    # 方法 3: icanhazip.com (强制 IPv4)
+    ip=$(curl -4 -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # 方法 4: ip.sb (强制 IPv4)
+    ip=$(curl -4 -s --connect-timeout 3 https://api.ip.sb/ip 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "$ip"
         return 0
     fi
@@ -176,13 +183,41 @@ get_public_ip() {
     echo "无法获取"
 }
 
-get_local_ip() {
-    # 获取主要网络接口的 IP 地址
+get_public_ipv6() {
+    # 获取 IPv6 公网地址
     local ip=""
 
-    # 方法 1: hostname -I (适用于大多数 Linux)
+    # 方法 1: ipify.org (强制 IPv6)
+    ip=$(curl -6 -s --connect-timeout 3 https://api64.ipify.org 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ : ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # 方法 2: icanhazip.com (强制 IPv6)
+    ip=$(curl -6 -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ : ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # 方法 3: ip.sb (强制 IPv6)
+    ip=$(curl -6 -s --connect-timeout 3 https://api.ip.sb/ip 2>/dev/null)
+    if [ -n "$ip" ] && [[ "$ip" =~ : ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    echo "无法获取"
+}
+
+get_local_ipv4() {
+    # 获取本地 IPv4 地址
+    local ip=""
+
+    # 方法 1: hostname -I (获取第一个 IPv4)
     if command -v hostname &> /dev/null; then
-        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -1)
         if [ -n "$ip" ]; then
             echo "$ip"
             return 0
@@ -191,8 +226,8 @@ get_local_ip() {
 
     # 方法 2: ip route (适用于现代 Linux)
     if command -v ip &> /dev/null; then
-        ip=$(ip route get 1 2>/dev/null | awk '{print $7; exit}')
-        if [ -n "$ip" ]; then
+        ip=$(ip -4 route get 1 2>/dev/null | awk '{print $7; exit}')
+        if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "$ip"
             return 0
         fi
@@ -200,8 +235,42 @@ get_local_ip() {
 
     # 方法 3: ifconfig (适用于旧版 Linux)
     if command -v ifconfig &> /dev/null; then
-        ip=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1)
+        ip=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | head -1 | sed 's/addr://')
+        if [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    echo "无法获取"
+}
+
+get_local_ipv6() {
+    # 获取本地 IPv6 地址
+    local ip=""
+
+    # 方法 1: hostname -I (获取第一个非本地 IPv6)
+    if command -v hostname &> /dev/null; then
+        ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E ':' | grep -v '^::1' | grep -v '^fe80:' | head -1)
         if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    # 方法 2: ip route (适用于现代 Linux)
+    if command -v ip &> /dev/null; then
+        ip=$(ip -6 route get 2001:4860:4860::8888 2>/dev/null | awk '{print $9; exit}')
+        if [ -n "$ip" ] && [[ "$ip" =~ : ]] && [[ ! "$ip" =~ ^fe80: ]]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+
+    # 方法 3: ifconfig (适用于旧版 Linux)
+    if command -v ifconfig &> /dev/null; then
+        ip=$(ifconfig 2>/dev/null | grep 'inet6' | grep -v '::1' | grep -v 'fe80:' | awk '{print $2}' | head -1 | sed 's/addr://')
+        if [ -n "$ip" ] && [[ "$ip" =~ : ]]; then
             echo "$ip"
             return 0
         fi
@@ -438,20 +507,59 @@ show_access_info() {
 
     print_header "访问地址"
 
-    # 获取公网 IP
-    print_info "正在获取公网 IP..."
-    PUBLIC_IP=$(get_public_ip)
+    # 获取公网 IPv4
+    print_info "正在获取公网 IPv4..."
+    PUBLIC_IPV4=$(get_public_ipv4)
 
-    # 获取内网 IP
+    # 获取公网 IPv6
+    print_info "正在获取公网 IPv6..."
+    PUBLIC_IPV6=$(get_public_ipv6)
+
+    # 获取内网 IPv4（内网只显示 IPv4）
     print_info "正在获取内网 IP..."
-    LOCAL_IP=$(get_local_ip)
+    LOCAL_IPV4=$(get_local_ipv4)
 
     echo -e "${GREEN}🎉 PanBox 部署成功！${NC}"
     echo ""
     echo "访问地址："
-    echo -e "  ${BLUE}公网: http://$PUBLIC_IP:$port${NC}"
-    echo -e "  ${BLUE}内网: http://$LOCAL_IP:$port${NC}"
+
+    # 显示公网 IPv4
+    if [ "$PUBLIC_IPV4" != "无法获取" ]; then
+        echo -e "  ${BLUE}公网 IPv4: http://$PUBLIC_IPV4:$port${NC}"
+    fi
+
+    # 显示公网 IPv6
+    if [ "$PUBLIC_IPV6" != "无法获取" ]; then
+        echo -e "  ${BLUE}公网 IPv6: http://[$PUBLIC_IPV6]:$port${NC}"
+    fi
+
+    # 如果两个公网 IP 都获取失败
+    if [ "$PUBLIC_IPV4" = "无法获取" ] && [ "$PUBLIC_IPV6" = "无法获取" ]; then
+        echo -e "  ${YELLOW}公网 IP: 无法获取（纯内网环境）${NC}"
+    fi
+
+    # 显示内网 IPv4
+    if [ "$LOCAL_IPV4" != "无法获取" ]; then
+        echo -e "  ${BLUE}内网: http://$LOCAL_IPV4:$port${NC}"
+    else
+        echo -e "  ${YELLOW}内网 IP: 无法获取${NC}"
+    fi
+
     echo ""
+
+    # 根据获取到的 IP 类型给出不同提示
+    if [ "$PUBLIC_IPV6" != "无法获取" ] && [ "$PUBLIC_IPV4" = "无法获取" ]; then
+        echo -e "${YELLOW}提示：${NC}"
+        echo -e "  - 当前服务器仅有 IPv6 公网地址"
+        echo -e "  - IPv6 地址需要用方括号 [] 包裹"
+        echo -e "  - 建议使用内网 IPv4 地址访问（兼容性更好）"
+        echo ""
+    elif [ "$PUBLIC_IPV4" != "无法获取" ] && [ "$PUBLIC_IPV6" != "无法获取" ]; then
+        echo -e "${YELLOW}提示：${NC}"
+        echo -e "  - 优先使用 IPv4 地址访问（兼容性更好）"
+        echo -e "  - IPv6 地址需要用方括号 [] 包裹"
+        echo ""
+    fi
 }
 
 #==============================================================================
