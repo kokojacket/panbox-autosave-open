@@ -8,30 +8,48 @@
 
 ```bash
 # 方法 1: gh-proxy.org 代理（推荐）
-curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 
 # 方法 2: 香港代理
-curl -fsSL https://hk.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://hk.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 
 # 方法 3: CDN 代理
-curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
 **海外用户或代理失败时使用原始地址：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
 ### 方式二：下载后安装
 
+**国内用户推荐使用代理下载（依次尝试）：**
+
 ```bash
-# 国内用户推荐使用代理下载
-curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh -o install.sh
+# 方法 1: gh-proxy.org 代理（推荐）
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
 
-# 或使用原始地址
-curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh -o install.sh
+# 方法 2: 香港代理
+curl -fsSL https://hk.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
 
+# 方法 3: CDN 代理
+curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
+
+# 方法 4: EdgeOne 代理
+curl -fsSL https://edgeone.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
+```
+
+**海外用户或代理失败时使用原始地址：**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh -o install.sh
+```
+
+**下载完成后执行：**
+
+```bash
 # 添加执行权限
 chmod +x install.sh
 
@@ -287,7 +305,7 @@ ls -lh /opt/panbox-autosave/docker-compose.yml
 ```bash
 # 通过代理下载脚本
 export https_proxy=http://your-proxy:port
-curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
 ### 2. Docker 未安装
@@ -354,7 +372,7 @@ docker-compose down
 sudo rm -rf /opt/panbox-autosave
 
 # 重新运行安装脚本（使用代理加速）
-curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
 ---
@@ -499,7 +517,7 @@ curl -v https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox
 3. 使用代理服务器
 ```bash
 export https_proxy=http://your-proxy:port
-curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 ```
 
 4. 联系技术支持并附上详细日志

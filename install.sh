@@ -7,13 +7,13 @@
 #
 # 快速安装（国内用户推荐使用代理加速）：
 #   # 方法 1: gh-proxy.org（推荐）
-#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 #
 #   # 方法 2: 原始地址
-#   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
 #
 #   # 方法 3: 手动下载后执行
-#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh
+#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh
 #   sudo bash install.sh
 #==============================================================================
 
