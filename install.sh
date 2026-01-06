@@ -4,6 +4,17 @@
 # PanBox 管理脚本
 # 版本：2.0
 # 用途：安装、更新、重启、停止 PanBox 网盘自动转存系统
+#
+# 快速安装（国内用户推荐使用代理加速）：
+#   # 方法 1: gh-proxy.org（推荐）
+#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+#
+#   # 方法 2: 原始地址
+#   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh | sudo bash
+#
+#   # 方法 3: 手动下载后执行
+#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/deploy/install.sh
+#   sudo bash install.sh
 #==============================================================================
 
 set -e  # 遇到错误立即退出
@@ -17,7 +28,14 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
-COMPOSE_URL="https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+# 多个备用 URL，依次尝试（国内加速镜像 + 原始地址）
+COMPOSE_URLS=(
+    "https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+    "https://hk.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+    "https://cdn.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+    "https://edgeone.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+    "https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
+)
 DOCKER_IMAGE="kokojacket/panbox-autosave:latest"
 DB_PASSWORD="panbox-autosave"
 START_PORT=1888
@@ -193,6 +211,48 @@ get_local_ip() {
 }
 
 #==============================================================================
+# 下载函数（支持多个备用 URL 重试）
+#==============================================================================
+
+download_with_retry() {
+    local output_file=$1
+    shift  # 移除第一个参数，剩余的都是 URL 数组
+    local urls=("$@")
+    local count=1
+    local total=${#urls[@]}
+
+    for url in "${urls[@]}"; do
+        # 提取代理名称或显示"原始地址"
+        local source_name=""
+        if echo "$url" | grep -q "gh-proxy.org"; then
+            source_name="gh-proxy.org 代理"
+        elif echo "$url" | grep -q "hk.gh-proxy.org"; then
+            source_name="香港代理"
+        elif echo "$url" | grep -q "cdn.gh-proxy.org"; then
+            source_name="CDN 代理"
+        elif echo "$url" | grep -q "edgeone.gh-proxy.org"; then
+            source_name="EdgeOne 代理"
+        else
+            source_name="GitHub 原始地址"
+        fi
+
+        print_info "[$count/$total] 尝试下载: $source_name"
+
+        if curl -fsSL --connect-timeout 10 --max-time 60 "$url" -o "$output_file" 2>/dev/null; then
+            print_success "配置文件下载成功"
+            return 0
+        else
+            print_warning "下载失败，尝试下一个地址..."
+        fi
+
+        count=$((count + 1))
+    done
+
+    print_error "所有下载地址均失败，请检查网络连接或稍后重试"
+    return 1
+}
+
+#==============================================================================
 # 安装函数
 #==============================================================================
 
@@ -220,12 +280,9 @@ install_panbox() {
 
     print_success "数据目录创建完成"
 
-    # 下载 docker-compose.yml
+    # 下载 docker-compose.yml（自动尝试多个备用地址）
     print_info "下载配置文件..."
-    if curl -fsSL "$COMPOSE_URL" -o "$INSTALL_DIR/docker-compose.yml"; then
-        print_success "配置文件下载成功"
-    else
-        print_error "下载失败，请检查网络连接"
+    if ! download_with_retry "$INSTALL_DIR/docker-compose.yml" "${COMPOSE_URLS[@]}"; then
         exit 1
     fi
 
