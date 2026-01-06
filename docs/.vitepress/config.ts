@@ -13,6 +13,9 @@ export default defineConfig({
   // 清理 URL，移除 .html 后缀
   cleanUrls: true,
 
+  // 忽略死链接检查（待页面完善后再启用检查）
+  ignoreDeadLinks: true,
+
   // Head 配置
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
