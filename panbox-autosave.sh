@@ -7,14 +7,14 @@
 #
 # 快速安装（国内用户推荐使用代理加速）：
 #   # 方法 1: gh-proxy.org（推荐）
-#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
+#   curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh | sudo bash
 #
 #   # 方法 2: 原始地址
-#   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh | sudo bash
 #
 #   # 方法 3: 手动下载后执行
-#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/install.sh
-#   sudo bash install.sh
+#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh
+#   sudo bash panbox-autosave.sh
 #==============================================================================
 
 set -e  # 遇到错误立即退出
@@ -75,7 +75,7 @@ print_header() {
 check_root() {
     if [ "$EUID" -ne 0 ]; then
         print_error "请使用 root 权限运行此脚本"
-        echo "使用方法: sudo bash install.sh"
+        echo "使用方法: sudo bash panbox-autosave.sh"
         exit 1
     fi
 }
