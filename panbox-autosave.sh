@@ -2,7 +2,7 @@
 
 #==============================================================================
 # PanBox 管理脚本
-# 版本：2.0
+# 版本：2026.05.20.1
 # 用途：安装、更新、重启、停止 PanBox 网盘自动转存系统
 #
 # 快速安装（国内用户推荐使用代理加速）：
@@ -13,7 +13,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh | sudo bash
 #
 #   # 方法 3: 手动下载后执行
-#   wget https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh
+#   wget -O panbox-autosave.sh https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh
 #   sudo bash panbox-autosave.sh
 #==============================================================================
 
@@ -28,6 +28,16 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
+SCRIPT_VERSION="2026.05.20.1"
+SELF_UPDATE_RESTARTED_ENV="PANBOX_SCRIPT_SELF_UPDATED"
+# 多个备用 URL，依次尝试（国内加速镜像 + 原始地址）
+SCRIPT_URLS=(
+    "https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh"
+    "https://hk.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh"
+    "https://cdn.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh"
+    "https://edgeone.gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh"
+    "https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/panbox-autosave.sh"
+)
 # 多个备用 URL，依次尝试（国内加速镜像 + 原始地址）
 COMPOSE_URLS=(
     "https://gh-proxy.org/https://raw.githubusercontent.com/kokojacket/panbox-autosave-open/main/docker-compose.yml"
@@ -107,6 +117,96 @@ check_docker_compose() {
     else
         DOCKER_COMPOSE_CMD="docker compose"
         print_success "Docker Compose 已安装: $(docker compose version)"
+    fi
+}
+
+#==============================================================================
+# 脚本自更新函数
+#==============================================================================
+
+get_script_path() {
+    if [ ! -f "$0" ]; then
+        return 1
+    fi
+
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)" || return 1
+    printf "%s/%s\n" "$script_dir" "$(basename "$0")"
+}
+
+extract_script_version() {
+    local script_file="$1"
+    grep -m1 '^SCRIPT_VERSION=' "$script_file" | sed -E 's/^SCRIPT_VERSION="?([^"[:space:]]+)"?.*/\1/'
+}
+
+self_update_script() {
+    local script_path="$1"
+    local new_script="$2"
+    local backup_path="${script_path}.bak"
+    shift 2
+
+    if ! bash -n "$new_script"; then
+        print_error "远端脚本语法检查失败，已取消自更新"
+        return 1
+    fi
+
+    cp "$script_path" "$backup_path" || {
+        print_error "备份当前脚本失败，无法继续自更新"
+        return 1
+    }
+
+    chmod +x "$new_script"
+    if ! mv "$new_script" "$script_path"; then
+        print_error "替换当前脚本失败，可能没有写入权限"
+        return 1
+    fi
+
+    print_success "脚本已更新，旧版本备份为：$backup_path"
+    print_info "正在使用最新脚本重新启动..."
+    export "$SELF_UPDATE_RESTARTED_ENV=1"
+    exec "$script_path" "$@"
+}
+
+check_and_force_self_update() {
+    if [ "${!SELF_UPDATE_RESTARTED_ENV:-0}" = "1" ]; then
+        return 0
+    fi
+
+    local script_path
+    if ! script_path="$(get_script_path)"; then
+        print_warning "当前脚本不是从本地文件运行，跳过脚本自更新检查"
+        return 0
+    fi
+
+    local tmp_file
+    tmp_file="$(mktemp)"
+
+    print_info "检查管理脚本更新..."
+    if ! download_with_retry "$tmp_file" "${SCRIPT_URLS[@]}"; then
+        rm -f "$tmp_file"
+        print_error "脚本更新检查失败，已停止执行以避免使用过期脚本"
+        exit 1
+    fi
+
+    local remote_version
+    remote_version="$(extract_script_version "$tmp_file")"
+    if [ -z "$remote_version" ]; then
+        rm -f "$tmp_file"
+        print_error "无法识别远端脚本版本，已停止执行以避免使用过期脚本"
+        exit 1
+    fi
+
+    if [ "$remote_version" = "$SCRIPT_VERSION" ]; then
+        rm -f "$tmp_file"
+        print_success "管理脚本已是最新版本：$SCRIPT_VERSION"
+        return 0
+    fi
+
+    print_warning "检测到管理脚本更新：当前 $SCRIPT_VERSION → 最新 $remote_version"
+    if ! self_update_script "$script_path" "$tmp_file" "$@"; then
+        rm -f "$tmp_file"
+        print_error "脚本自更新失败，已停止执行以避免使用过期脚本"
+        exit 1
     fi
 }
 
@@ -557,8 +657,8 @@ show_menu() {
  |_|   \__,_|_| |_|____/ \___/_/\_\
 
      网盘自动转存系统 - 管理脚本
-          Version 2.0
 EOF
+    echo "          Version ${SCRIPT_VERSION}"
 
     echo ""
     echo -e "${BLUE}请选择操作：${NC}"
@@ -577,6 +677,7 @@ EOF
 main() {
     # 检查环境
     check_root
+    check_and_force_self_update "$@"
     check_docker
     check_docker_compose
 
@@ -614,4 +715,4 @@ main() {
 }
 
 # 运行主函数
-main
+main "$@"
