@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased] - 2026-05-30
+
+### Fixed
+- `panbox-autosave.sh`：修复更新时 PostgreSQL 可能报 `postmaster.pid` 锁冲突、宿主机残留多个 postgres 进程的问题。更新流程由原先的直接 `up -d` 改为「先 `down --remove-orphans -t 60` 彻底停止旧容器、等待 PostgreSQL 释放数据目录锁，再 `up -d --remove-orphans` 启动」，消除新旧 postgres 同时打开同一份数据目录的抢锁窗口。
+
+### Changed
+- `panbox-autosave.sh`：安装流程的 `up -d` 加 `--remove-orphans`，清理遗留孤儿容器。
+- `panbox-autosave.sh`：停止流程的 `down` 加 `--remove-orphans -t 60`，给 PostgreSQL 足够的优雅关闭时间，避免被默认 10 秒超时强杀后触发下次启动的 crash recovery。
+- `panbox-autosave.sh`：`SCRIPT_VERSION` 升级到 `2026.05.30.1`，触发用户端强制自更新拉取上述修复。
+
 ## [Unreleased] - 2026-02-13
 
 ### Changed

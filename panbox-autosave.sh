@@ -28,7 +28,7 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
-SCRIPT_VERSION="2026.05.20.1"
+SCRIPT_VERSION="2026.05.30.1"
 SELF_UPDATE_RESTARTED_ENV="PANBOX_SCRIPT_SELF_UPDATED"
 # 多个备用 URL，依次尝试（国内加速镜像 + 原始地址）
 SCRIPT_URLS=(
@@ -499,7 +499,7 @@ install_panbox() {
 
     # 启动服务
     print_info "启动服务..."
-    if $DOCKER_COMPOSE_CMD up -d; then
+    if $DOCKER_COMPOSE_CMD up -d --remove-orphans; then
         print_success "服务启动成功"
     else
         print_error "服务启动失败"
@@ -538,9 +538,18 @@ update_panbox() {
         exit 1
     fi
 
-    # 重启服务
-    print_info "重启服务..."
-    if $DOCKER_COMPOSE_CMD up -d; then
+    # 先彻底停止旧容器，等待 PostgreSQL 释放数据目录锁，再启动
+    # 避免新旧 postgres 同时打开同一份数据目录导致 postmaster.pid 锁冲突
+    # -t 60 给 PostgreSQL 足够的优雅关闭时间（flush + checkpoint）
+    print_info "停止旧容器（确保 PostgreSQL 完全退出并释放数据目录锁）..."
+    if ! $DOCKER_COMPOSE_CMD down --remove-orphans -t 60; then
+        print_error "停止旧容器失败"
+        exit 1
+    fi
+
+    # 启动服务
+    print_info "启动服务..."
+    if $DOCKER_COMPOSE_CMD up -d --remove-orphans; then
         print_success "服务更新成功"
     else
         print_error "服务更新失败"
@@ -600,7 +609,7 @@ stop_panbox() {
     cd "$INSTALL_DIR"
 
     print_info "停止服务..."
-    if $DOCKER_COMPOSE_CMD down; then
+    if $DOCKER_COMPOSE_CMD down --remove-orphans -t 60; then
         print_success "服务已停止"
     else
         print_error "服务停止失败"
