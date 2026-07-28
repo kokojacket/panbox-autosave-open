@@ -2,7 +2,7 @@
 
 #==============================================================================
 # PanBox 管理脚本
-# 版本：2026.05.20.1
+# 版本：2026.07.28.1
 # 用途：安装、更新、重启、停止 PanBox 网盘自动转存系统
 #
 # 快速安装（国内用户推荐使用代理加速）：
@@ -28,7 +28,7 @@ NC='\033[0m' # No Color
 
 # 配置变量
 INSTALL_DIR="/opt/panbox-autosave"
-SCRIPT_VERSION="2026.05.30.1"
+SCRIPT_VERSION="2026.07.28.1"
 SELF_UPDATE_RESTARTED_ENV="PANBOX_SCRIPT_SELF_UPDATED"
 # 多个备用 URL，依次尝试（国内加速镜像 + 原始地址）
 SCRIPT_URLS=(
@@ -118,6 +118,49 @@ check_docker_compose() {
         DOCKER_COMPOSE_CMD="docker compose"
         print_success "Docker Compose 已安装: $(docker compose version)"
     fi
+}
+
+write_logging_compose_override() {
+    local target="$INSTALL_DIR/docker-compose.logging.yml"
+    local temp_file
+    temp_file="$(mktemp "$INSTALL_DIR/.docker-compose.logging.yml.XXXXXX")" || return 1
+
+    if ! printf '%s\n' \
+        'services:' \
+        '  panbox-autosave:' \
+        '    logging:' \
+        '      driver: json-file' \
+        '      options:' \
+        '        max-size: "10m"' \
+        '        max-file: "3"' \
+        '  postgres:' \
+        '    logging:' \
+        '      driver: json-file' \
+        '      options:' \
+        '        max-size: "10m"' \
+        '        max-file: "3"' > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    chmod 644 "$temp_file"
+    mv "$temp_file" "$target"
+}
+
+run_compose() {
+    local compose_files=(-f "$INSTALL_DIR/docker-compose.yml")
+    if [ -f "$INSTALL_DIR/docker-compose.override.yml" ]; then
+        compose_files+=(-f "$INSTALL_DIR/docker-compose.override.yml")
+    fi
+    if [ -f "$INSTALL_DIR/docker-compose.logging.yml" ]; then
+        compose_files+=(-f "$INSTALL_DIR/docker-compose.logging.yml")
+    fi
+    $DOCKER_COMPOSE_CMD "${compose_files[@]}" "$@"
+}
+
+get_current_port() {
+    sed -n 's/^[[:space:]]*-[[:space:]]*"\([0-9][0-9]*\):8000".*/\1/p' \
+        "$INSTALL_DIR/docker-compose.yml" | head -1
 }
 
 #==============================================================================
@@ -499,7 +542,7 @@ install_panbox() {
 
     # 启动服务
     print_info "启动服务..."
-    if $DOCKER_COMPOSE_CMD up -d --remove-orphans; then
+    if run_compose up -d --remove-orphans; then
         print_success "服务启动成功"
     else
         print_error "服务启动失败"
@@ -529,6 +572,17 @@ update_panbox() {
 
     cd "$INSTALL_DIR"
 
+    # 为已有安装生成独立覆盖配置，保留用户修改过的端口、密码和其他 Compose 设置。
+    print_info "应用 Docker 日志轮转配置..."
+    if ! write_logging_compose_override; then
+        print_error "生成 Docker 日志配置失败"
+        exit 1
+    fi
+    if ! run_compose config >/dev/null; then
+        print_error "Docker Compose 配置校验失败，旧容器未停止"
+        exit 1
+    fi
+
     # 拉取最新镜像
     print_info "拉取最新镜像..."
     if docker pull "$DOCKER_IMAGE"; then
@@ -542,14 +596,14 @@ update_panbox() {
     # 避免新旧 postgres 同时打开同一份数据目录导致 postmaster.pid 锁冲突
     # -t 60 给 PostgreSQL 足够的优雅关闭时间（flush + checkpoint）
     print_info "停止旧容器（确保 PostgreSQL 完全退出并释放数据目录锁）..."
-    if ! $DOCKER_COMPOSE_CMD down --remove-orphans -t 60; then
+    if ! run_compose down --remove-orphans -t 60; then
         print_error "停止旧容器失败"
         exit 1
     fi
 
     # 启动服务
     print_info "启动服务..."
-    if $DOCKER_COMPOSE_CMD up -d --remove-orphans; then
+    if run_compose up -d --remove-orphans; then
         print_success "服务更新成功"
     else
         print_error "服务更新失败"
@@ -557,7 +611,7 @@ update_panbox() {
     fi
 
     # 获取当前端口
-    CURRENT_PORT=$(grep -oP '"\K[0-9]+(?=:8000")' docker-compose.yml | head -1)
+    CURRENT_PORT=$(get_current_port)
 
     # 显示访问地址
     show_access_info "$CURRENT_PORT"
@@ -579,7 +633,7 @@ restart_panbox() {
     cd "$INSTALL_DIR"
 
     print_info "重启服务..."
-    if $DOCKER_COMPOSE_CMD restart; then
+    if run_compose restart; then
         print_success "服务重启成功"
     else
         print_error "服务重启失败"
@@ -587,7 +641,7 @@ restart_panbox() {
     fi
 
     # 获取当前端口
-    CURRENT_PORT=$(grep -oP '"\K[0-9]+(?=:8000")' docker-compose.yml | head -1)
+    CURRENT_PORT=$(get_current_port)
 
     # 显示访问地址
     show_access_info "$CURRENT_PORT"
@@ -609,7 +663,7 @@ stop_panbox() {
     cd "$INSTALL_DIR"
 
     print_info "停止服务..."
-    if $DOCKER_COMPOSE_CMD down --remove-orphans -t 60; then
+    if run_compose down --remove-orphans -t 60; then
         print_success "服务已停止"
     else
         print_error "服务停止失败"

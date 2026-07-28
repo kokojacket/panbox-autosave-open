@@ -4,6 +4,11 @@ services:
     image: kokojacket/panbox-autosave:latest
     container_name: panbox-autosave
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - postgres
 
@@ -59,6 +64,11 @@ services:
     image: postgres:16-alpine
     container_name: panbox-autosave-postgres
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
     environment:
       POSTGRES_DB: panbox-autosave
